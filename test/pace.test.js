@@ -52,3 +52,36 @@ test('stripTime zeroes out the time-of-day', () => {
   assert.equal(d.getMonth(), 6);
   assert.equal(d.getDate(), 24);
 });
+
+test('countRemainingWorkDays counts non-holiday days from today through endDate inclusive', () => {
+  const dayInfos = [
+    { date: new Date(2026, 6, 24), isHoliday: false },
+    { date: new Date(2026, 6, 25), isHoliday: true },
+    { date: new Date(2026, 6, 26), isHoliday: true },
+    { date: new Date(2026, 6, 27), isHoliday: false },
+    { date: new Date(2026, 6, 28), isHoliday: false },
+    { date: new Date(2026, 6, 29), isHoliday: false },
+    { date: new Date(2026, 6, 30), isHoliday: false },
+    { date: new Date(2026, 6, 31), isHoliday: false },
+  ];
+  const today = new Date(2026, 6, 24, 9, 0, 0);
+  const endDate = new Date(2026, 6, 31);
+  assert.equal(lib.countRemainingWorkDays(dayInfos, today, endDate), 6);
+});
+
+test('countRemainingWorkDays ignores days before today', () => {
+  const dayInfos = [
+    { date: new Date(2026, 6, 20), isHoliday: false },
+    { date: new Date(2026, 6, 24), isHoliday: false },
+  ];
+  const today = new Date(2026, 6, 24);
+  const endDate = new Date(2026, 6, 31);
+  assert.equal(lib.countRemainingWorkDays(dayInfos, today, endDate), 1);
+});
+
+test('countRemainingWorkDays returns 0 when no matching days exist', () => {
+  const dayInfos = [{ date: new Date(2026, 6, 25), isHoliday: true }];
+  const today = new Date(2026, 6, 24);
+  const endDate = new Date(2026, 6, 31);
+  assert.equal(lib.countRemainingWorkDays(dayInfos, today, endDate), 0);
+});

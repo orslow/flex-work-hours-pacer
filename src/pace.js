@@ -38,11 +38,29 @@ function stripTime(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+function countRemainingWorkDays(dayInfos, today, endDate) {
+  var todayStripped = stripTime(today);
+  var endStripped = stripTime(endDate);
+  var count = 0;
+  for (var i = 0; i < dayInfos.length; i++) {
+    var d = stripTime(dayInfos[i].date);
+    if (
+      d.getTime() >= todayStripped.getTime() &&
+      d.getTime() <= endStripped.getTime() &&
+      !dayInfos[i].isHoliday
+    ) {
+      count++;
+    }
+  }
+  return count;
+}
+
 var FlexPacerLib = {
   parseTimeToMinutes: parseTimeToMinutes,
   extractRequiredRemainingMinutes: extractRequiredRemainingMinutes,
   parsePeriodRange: parsePeriodRange,
   stripTime: stripTime,
+  countRemainingWorkDays: countRemainingWorkDays,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
