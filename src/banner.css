@@ -1,0 +1,11 @@
+.flex-pacer-banner {
+  background: #eef6ff;
+  color: #1a3a5c;
+  border: 1px solid #b8d9f7;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
