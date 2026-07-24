@@ -55,12 +55,44 @@ function countRemainingWorkDays(dayInfos, today, endDate) {
   return count;
 }
 
+function computePace(remainingMinutes, remainingDays) {
+  if (remainingMinutes <= 0) return { status: 'done' };
+  if (remainingDays <= 0) return { status: 'noDaysLeft' };
+  return { status: 'ok', dailyMinutes: Math.ceil(remainingMinutes / remainingDays) };
+}
+
+function formatMinutesAsHM(minutes) {
+  var hours = Math.floor(minutes / 60);
+  var mins = minutes % 60;
+  if (hours === 0) return mins + '분';
+  if (mins === 0) return hours + '시간';
+  return hours + '시간 ' + mins + '분';
+}
+
+function buildBannerMessage(remainingMinutes, remainingDays) {
+  var pace = computePace(remainingMinutes, remainingDays);
+  if (pace.status === 'done') {
+    return '이번 정산기간 필수 근무시간을 이미 채우셨습니다 🎉';
+  }
+  if (pace.status === 'noDaysLeft') {
+    return '이번 정산기간 근무 가능일이 모두 지났습니다.';
+  }
+  return (
+    '잔여 ' + formatMinutesAsHM(remainingMinutes) +
+    ' - 남은 근무일 ' + remainingDays + '일' +
+    ' -> 하루 평균 ' + formatMinutesAsHM(pace.dailyMinutes) + '씩 더 일하면 됩니다'
+  );
+}
+
 var FlexPacerLib = {
   parseTimeToMinutes: parseTimeToMinutes,
   extractRequiredRemainingMinutes: extractRequiredRemainingMinutes,
   parsePeriodRange: parsePeriodRange,
   stripTime: stripTime,
   countRemainingWorkDays: countRemainingWorkDays,
+  computePace: computePace,
+  formatMinutesAsHM: formatMinutesAsHM,
+  buildBannerMessage: buildBannerMessage,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

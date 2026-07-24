@@ -85,3 +85,49 @@ test('countRemainingWorkDays returns 0 when no matching days exist', () => {
   const endDate = new Date(2026, 6, 31);
   assert.equal(lib.countRemainingWorkDays(dayInfos, today, endDate), 0);
 });
+
+test('computePace returns done when remainingMinutes is zero or negative', () => {
+  assert.deepEqual(lib.computePace(0, 5), { status: 'done' });
+  assert.deepEqual(lib.computePace(-10, 5), { status: 'done' });
+});
+
+test('computePace returns noDaysLeft when remainingDays is zero or negative and time is still owed', () => {
+  assert.deepEqual(lib.computePace(120, 0), { status: 'noDaysLeft' });
+});
+
+test('computePace returns ok with ceil-rounded dailyMinutes', () => {
+  assert.deepEqual(lib.computePace(100, 3), { status: 'ok', dailyMinutes: 34 });
+});
+
+test('formatMinutesAsHM formats hours and minutes', () => {
+  assert.equal(lib.formatMinutesAsHM(2163), '36시간 3분');
+});
+
+test('formatMinutesAsHM formats whole hours without a minutes part', () => {
+  assert.equal(lib.formatMinutesAsHM(120), '2시간');
+});
+
+test('formatMinutesAsHM formats minutes only when under an hour', () => {
+  assert.equal(lib.formatMinutesAsHM(45), '45분');
+});
+
+test('buildBannerMessage builds the ok message', () => {
+  assert.equal(
+    lib.buildBannerMessage(2163, 6),
+    '잔여 36시간 3분 - 남은 근무일 6일 -> 하루 평균 6시간 1분씩 더 일하면 됩니다'
+  );
+});
+
+test('buildBannerMessage builds the done message', () => {
+  assert.equal(
+    lib.buildBannerMessage(0, 3),
+    '이번 정산기간 필수 근무시간을 이미 채우셨습니다 🎉'
+  );
+});
+
+test('buildBannerMessage builds the noDaysLeft message', () => {
+  assert.equal(
+    lib.buildBannerMessage(60, 0),
+    '이번 정산기간 근무 가능일이 모두 지났습니다.'
+  );
+});
