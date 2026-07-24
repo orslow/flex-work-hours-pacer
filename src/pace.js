@@ -19,9 +19,30 @@ function extractRequiredRemainingMinutes(widgetText) {
   return null;
 }
 
+function parsePeriodRange(periodText) {
+  var m = /(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\s*[–-]\s*(\d{1,2})\.\s*(\d{1,2})/.exec(String(periodText));
+  if (!m) return null;
+  var startYear = parseInt(m[1], 10);
+  var startMonth = parseInt(m[2], 10);
+  var startDay = parseInt(m[3], 10);
+  var endMonth = parseInt(m[4], 10);
+  var endDay = parseInt(m[5], 10);
+  var endYear = endMonth < startMonth ? startYear + 1 : startYear;
+  return {
+    startDate: new Date(startYear, startMonth - 1, startDay),
+    endDate: new Date(endYear, endMonth - 1, endDay),
+  };
+}
+
+function stripTime(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 var FlexPacerLib = {
   parseTimeToMinutes: parseTimeToMinutes,
   extractRequiredRemainingMinutes: extractRequiredRemainingMinutes,
+  parsePeriodRange: parsePeriodRange,
+  stripTime: stripTime,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
