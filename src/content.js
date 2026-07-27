@@ -65,7 +65,7 @@
     main.insertBefore(banner, main.firstChild);
   }
 
-  function insertOrUpdateCompactIndicator(widgetElement, message) {
+  function insertOrUpdateCompactIndicator(message) {
     var compact = document.getElementById(COMPACT_ID);
     if (compact) {
       if (compact.textContent !== message) {
@@ -73,17 +73,13 @@
       }
       return;
     }
-    var wrapper = widgetElement.parentElement;
-    if (!wrapper) return;
-    var computedPosition = window.getComputedStyle(wrapper).position;
-    if (computedPosition === 'static' || !computedPosition) {
-      wrapper.style.position = 'relative';
-    }
+    var header = document.querySelector('header[data-scope="page"][data-part="header"]');
+    if (!header || !header.parentNode) return;
     compact = document.createElement('div');
     compact.id = COMPACT_ID;
     compact.className = 'flex-pacer-compact';
     compact.textContent = message;
-    wrapper.appendChild(compact);
+    header.parentNode.insertBefore(compact, header.nextSibling);
   }
 
   function render() {
@@ -112,7 +108,7 @@
     var remainingDays = lib.countRemainingWorkDays(dayDates, new Date(), range.endDate);
 
     insertOrUpdateBanner(lib.buildBannerMessage(remainingMinutes, remainingDays));
-    insertOrUpdateCompactIndicator(widgetElement, lib.buildCompactMessage(remainingMinutes, remainingDays));
+    insertOrUpdateCompactIndicator(lib.buildCompactMessage(remainingMinutes, remainingDays));
   }
 
   function scheduleRender() {
