@@ -1,6 +1,5 @@
 (function () {
   var lib = window.FlexPacerLib;
-  var BANNER_ID = 'flex-pacer-banner';
   var COMPACT_ID = 'flex-pacer-compact';
   var DEBOUNCE_MS = 250;
   var debounceTimer = null;
@@ -48,23 +47,6 @@
     });
   }
 
-  function insertOrUpdateBanner(message) {
-    var banner = document.getElementById(BANNER_ID);
-    if (banner) {
-      if (banner.textContent !== message) {
-        banner.textContent = message;
-      }
-      return;
-    }
-    var main = document.querySelector('main[data-scope="page"][data-part="main"]');
-    if (!main) return;
-    banner = document.createElement('div');
-    banner.id = BANNER_ID;
-    banner.className = 'flex-pacer-banner';
-    banner.textContent = message;
-    main.insertBefore(banner, main.firstChild);
-  }
-
   function insertOrUpdateCompactIndicator(message) {
     var compact = document.getElementById(COMPACT_ID);
     if (compact) {
@@ -88,7 +70,7 @@
     var dayInfos = findDayInfos();
 
     if (!periodText || !widgetElement || dayInfos.length === 0) {
-      console.warn('[flex-pacer] required page elements not found, skipping banner');
+      console.warn('[flex-pacer] required page elements not found, skipping indicator');
       return;
     }
 
@@ -107,7 +89,6 @@
     var dayDates = buildDayDates(dayInfos, range.startDate);
     var remainingDays = lib.countRemainingWorkDays(dayDates, new Date(), range.endDate);
 
-    insertOrUpdateBanner(lib.buildBannerMessage(remainingMinutes, remainingDays));
     insertOrUpdateCompactIndicator(lib.buildCompactMessage(remainingMinutes, remainingDays));
   }
 
