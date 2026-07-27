@@ -5,7 +5,7 @@
   "description": "flex.team 내 근무 페이지에서 잔여 필수 근무시간과 남은 근무일 기준 하루 평균 근무시간을 배너로 보여줍니다.",
   "content_scripts": [
     {
-      "matches": ["https://flex.team/time-tracking/my-work-record*"],
+      "matches": ["https://flex.team/*"],
       "js": ["src/pace.js", "src/content.js"],
       "css": ["src/banner.css"],
       "run_at": "document_idle"

@@ -4,6 +4,15 @@
   var DEBOUNCE_MS = 250;
   var debounceTimer = null;
 
+  function isOnTargetPage() {
+    return /^\/time-tracking\/my-work-record/.test(location.pathname);
+  }
+
+  function removeCompactIndicator() {
+    var compact = document.getElementById(COMPACT_ID);
+    if (compact) compact.remove();
+  }
+
   function findPeriodRangeText() {
     var bodyText = document.body.innerText;
     var m = /\d{4}\.\s*\d{1,2}\.\s*\d{1,2}\s*[–-]\s*\d{1,2}\.\s*\d{1,2}/.exec(bodyText);
@@ -65,6 +74,11 @@
   }
 
   function render() {
+    if (!isOnTargetPage()) {
+      removeCompactIndicator();
+      return;
+    }
+
     var periodText = findPeriodRangeText();
     var widgetElement = findWidgetElement();
     var dayInfos = findDayInfos();
