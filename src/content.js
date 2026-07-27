@@ -1,6 +1,7 @@
 (function () {
   var lib = window.FlexPacerLib;
   var BANNER_ID = 'flex-pacer-banner';
+  var COMPACT_ID = 'flex-pacer-compact';
   var DEBOUNCE_MS = 250;
   var debounceTimer = null;
 
@@ -10,13 +11,13 @@
     return m ? m[0] : null;
   }
 
-  function findWidgetText() {
+  function findWidgetElement() {
     var triggers = document.querySelectorAll('[data-scope="hover-visible"][data-part="trigger"]');
     for (var i = 0; i < triggers.length; i++) {
       var text = triggers[i].textContent || '';
       var matches = text.match(/-?\d{1,3}:\d{2}/g);
       if (matches && matches.length >= 2) {
-        return text;
+        return triggers[i];
       }
     }
     return null;
@@ -64,12 +65,33 @@
     main.insertBefore(banner, main.firstChild);
   }
 
+  function insertOrUpdateCompactIndicator(widgetElement, message) {
+    var compact = document.getElementById(COMPACT_ID);
+    if (compact) {
+      if (compact.textContent !== message) {
+        compact.textContent = message;
+      }
+      return;
+    }
+    var wrapper = widgetElement.parentElement;
+    if (!wrapper) return;
+    var computedPosition = window.getComputedStyle(wrapper).position;
+    if (computedPosition === 'static' || !computedPosition) {
+      wrapper.style.position = 'relative';
+    }
+    compact = document.createElement('div');
+    compact.id = COMPACT_ID;
+    compact.className = 'flex-pacer-compact';
+    compact.textContent = message;
+    wrapper.appendChild(compact);
+  }
+
   function render() {
     var periodText = findPeriodRangeText();
-    var widgetText = findWidgetText();
+    var widgetElement = findWidgetElement();
     var dayInfos = findDayInfos();
 
-    if (!periodText || !widgetText || dayInfos.length === 0) {
+    if (!periodText || !widgetElement || dayInfos.length === 0) {
       console.warn('[flex-pacer] required page elements not found, skipping banner');
       return;
     }
@@ -80,7 +102,7 @@
       return;
     }
 
-    var remainingMinutes = lib.extractRequiredRemainingMinutes(widgetText);
+    var remainingMinutes = lib.extractRequiredRemainingMinutes(widgetElement.textContent || '');
     if (remainingMinutes === null) {
       console.warn('[flex-pacer] failed to parse remaining required minutes');
       return;
@@ -88,8 +110,9 @@
 
     var dayDates = buildDayDates(dayInfos, range.startDate);
     var remainingDays = lib.countRemainingWorkDays(dayDates, new Date(), range.endDate);
-    var message = lib.buildBannerMessage(remainingMinutes, remainingDays);
-    insertOrUpdateBanner(message);
+
+    insertOrUpdateBanner(lib.buildBannerMessage(remainingMinutes, remainingDays));
+    insertOrUpdateCompactIndicator(widgetElement, lib.buildCompactMessage(remainingMinutes, remainingDays));
   }
 
   function scheduleRender() {
