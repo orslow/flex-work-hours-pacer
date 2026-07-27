@@ -94,9 +94,9 @@ function formatCompactRemaining(minutes) {
 
 function buildCompactMessage(remainingMinutes, remainingDays) {
   var pace = computePace(remainingMinutes, remainingDays);
-  if (pace.status === 'done') return 'goal met 🎉';
-  if (pace.status === 'noDaysLeft') return 'no days left';
-  return formatCompactRemaining(pace.dailyMinutes) + ' / day remains';
+  if (pace.status === 'done') return 'Goal met 🎉';
+  if (pace.status === 'noDaysLeft') return 'No days left';
+  return 'Need ' + formatCompactRemaining(pace.dailyMinutes) + '/day';
 }
 
 var FlexPacerLib = {

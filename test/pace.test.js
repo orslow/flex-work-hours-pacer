@@ -145,13 +145,13 @@ test('formatCompactRemaining formats minutes only when under an hour', () => {
 });
 
 test('buildCompactMessage builds the ok message', () => {
-  assert.equal(lib.buildCompactMessage(2163, 5), '7h 13m / day remains');
+  assert.equal(lib.buildCompactMessage(2163, 5), 'Need 7h 13m/day');
 });
 
 test('buildCompactMessage builds the done message', () => {
-  assert.equal(lib.buildCompactMessage(0, 3), 'goal met 🎉');
+  assert.equal(lib.buildCompactMessage(0, 3), 'Goal met 🎉');
 });
 
 test('buildCompactMessage builds the noDaysLeft message', () => {
-  assert.equal(lib.buildCompactMessage(60, 0), 'no days left');
+  assert.equal(lib.buildCompactMessage(60, 0), 'No days left');
 });
