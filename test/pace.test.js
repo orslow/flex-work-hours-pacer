@@ -131,3 +131,27 @@ test('buildBannerMessage builds the noDaysLeft message', () => {
     '이번 정산기간 근무 가능일이 모두 지났습니다.'
   );
 });
+
+test('formatCompactRemaining formats hours and minutes compactly', () => {
+  assert.equal(lib.formatCompactRemaining(433), '7h 13m');
+});
+
+test('formatCompactRemaining formats whole hours without a minutes part', () => {
+  assert.equal(lib.formatCompactRemaining(120), '2h');
+});
+
+test('formatCompactRemaining formats minutes only when under an hour', () => {
+  assert.equal(lib.formatCompactRemaining(45), '45m');
+});
+
+test('buildCompactMessage builds the ok message', () => {
+  assert.equal(lib.buildCompactMessage(2163, 5), '7h 13m / day remains');
+});
+
+test('buildCompactMessage builds the done message', () => {
+  assert.equal(lib.buildCompactMessage(0, 3), 'goal met 🎉');
+});
+
+test('buildCompactMessage builds the noDaysLeft message', () => {
+  assert.equal(lib.buildCompactMessage(60, 0), 'no days left');
+});

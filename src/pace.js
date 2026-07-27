@@ -84,6 +84,21 @@ function buildBannerMessage(remainingMinutes, remainingDays) {
   );
 }
 
+function formatCompactRemaining(minutes) {
+  var hours = Math.floor(minutes / 60);
+  var mins = minutes % 60;
+  if (hours === 0) return mins + 'm';
+  if (mins === 0) return hours + 'h';
+  return hours + 'h ' + mins + 'm';
+}
+
+function buildCompactMessage(remainingMinutes, remainingDays) {
+  var pace = computePace(remainingMinutes, remainingDays);
+  if (pace.status === 'done') return 'goal met 🎉';
+  if (pace.status === 'noDaysLeft') return 'no days left';
+  return formatCompactRemaining(pace.dailyMinutes) + ' / day remains';
+}
+
 var FlexPacerLib = {
   parseTimeToMinutes: parseTimeToMinutes,
   extractRequiredRemainingMinutes: extractRequiredRemainingMinutes,
@@ -93,6 +108,8 @@ var FlexPacerLib = {
   computePace: computePace,
   formatMinutesAsHM: formatMinutesAsHM,
   buildBannerMessage: buildBannerMessage,
+  formatCompactRemaining: formatCompactRemaining,
+  buildCompactMessage: buildCompactMessage,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
