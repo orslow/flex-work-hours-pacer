@@ -8,15 +8,14 @@ function parseTimeToMinutes(token) {
 }
 
 function extractRequiredRemainingMinutes(widgetText) {
+  // 위젯은 순서대로 실근무시간, 남은 필수 근무시간, 최대 근무 가능 시간 세 값을 보여준다.
+  // 남은 필수 근무시간은 부족하면 음수, 목표를 채웠거나 초과하면 0 또는 양수로 표시되므로
+  // 부호로 구분하지 않고 두 번째 값을 위치로 읽어 부호만 반전한다 (양수 = 아직 필요한 시간).
   var matches = String(widgetText).match(/-?\d{1,3}:\d{2}/g);
-  if (!matches) return null;
-  for (var i = 0; i < matches.length; i++) {
-    var value = parseTimeToMinutes(matches[i]);
-    if (value !== null && value < 0) {
-      return Math.abs(value);
-    }
-  }
-  return null;
+  if (!matches || matches.length < 3) return null;
+  var requiredValue = parseTimeToMinutes(matches[1]);
+  if (requiredValue === null) return null;
+  return requiredValue === 0 ? 0 : -requiredValue;
 }
 
 function parsePeriodRange(periodText) {

@@ -14,13 +14,27 @@ test('parseTimeToMinutes returns null for invalid input', () => {
   assert.equal(lib.parseTimeToMinutes('not-a-time'), null);
 });
 
-test('extractRequiredRemainingMinutes picks the first negative value', () => {
+test('extractRequiredRemainingMinutes reads the second value and negates it when still owed', () => {
   const text = '133:03\n-36:03\n-99:09';
   assert.equal(lib.extractRequiredRemainingMinutes(text), 36 * 60 + 3);
 });
 
-test('extractRequiredRemainingMinutes returns null when no negative value is present', () => {
-  assert.equal(lib.extractRequiredRemainingMinutes('133:03'), null);
+test('extractRequiredRemainingMinutes returns 0 when the goal is exactly met', () => {
+  const text = '133:03\n0:00\n-99:09';
+  assert.equal(lib.extractRequiredRemainingMinutes(text), 0);
+});
+
+test('extractRequiredRemainingMinutes returns a negative value when the goal is exceeded', () => {
+  const text = '133:03\n5:00\n-99:09';
+  assert.equal(lib.extractRequiredRemainingMinutes(text), -300);
+});
+
+test('extractRequiredRemainingMinutes returns null when fewer than 3 values are present (not fully rendered yet)', () => {
+  assert.equal(lib.extractRequiredRemainingMinutes('133:03\n-99:09'), null);
+});
+
+test('extractRequiredRemainingMinutes returns null when no time-like values are present', () => {
+  assert.equal(lib.extractRequiredRemainingMinutes('no data'), null);
 });
 
 test('parsePeriodRange parses a same-year range', () => {
