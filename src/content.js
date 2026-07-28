@@ -20,11 +20,16 @@
   }
 
   function findWidgetElement() {
+    // 위젯에는 순서대로 실근무시간(양수), 남은 필수 근무시간(음수), 최대 근무 가능 시간(음수) 세 값이
+    // 표시된다. flex.team이 이 셋을 동시에 렌더링하지 않아서, 남은 필수 근무시간이 뜨기 전
+    // (실근무시간 + 최대 근무 가능 시간 두 개만 있는 상태)에는 값이 아직 준비되지 않은 것으로 보고
+    // 3개가 모두 나타날 때까지 기다린다. 그렇지 않으면 최대 근무 가능 시간을 남은 필수 근무시간으로
+    // 잘못 읽는다.
     var triggers = document.querySelectorAll('[data-scope="hover-visible"][data-part="trigger"]');
     for (var i = 0; i < triggers.length; i++) {
       var text = triggers[i].textContent || '';
       var matches = text.match(/-?\d{1,3}:\d{2}/g);
-      if (matches && matches.length >= 2) {
+      if (matches && matches.length >= 3) {
         return triggers[i];
       }
     }
@@ -84,18 +89,21 @@
     var dayInfos = findDayInfos();
 
     if (!periodText || !widgetElement || dayInfos.length === 0) {
-      console.warn('[flex-pacer] required page elements not found, skipping indicator');
+      removeCompactIndicator();
+      console.warn('[flex-pacer] required page elements not found (yet), skipping indicator');
       return;
     }
 
     var range = lib.parsePeriodRange(periodText);
     if (!range) {
+      removeCompactIndicator();
       console.warn('[flex-pacer] failed to parse period range text:', periodText);
       return;
     }
 
     var remainingMinutes = lib.extractRequiredRemainingMinutes(widgetElement.textContent || '');
     if (remainingMinutes === null) {
+      removeCompactIndicator();
       console.warn('[flex-pacer] failed to parse remaining required minutes');
       return;
     }
