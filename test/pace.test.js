@@ -37,6 +37,182 @@ test('extractRequiredRemainingMinutes returns null when no time-like values are 
   assert.equal(lib.extractRequiredRemainingMinutes('no data'), null);
 });
 
+// 2026-08 실제 flex.team DOM에서 그대로 옮긴 날짜 셀 클래스 값
+const PLAIN_CELL_CLASS = 'c-bElvsc PJLV fx_5f52664e_1e9jm180 fx_5f52664e_1e9jm182';
+const HOLIDAY_CELL_CLASS =
+  'c-bElvsc c-bElvsc-fmLUio-colorType-holiday PJLV fx_5f52664e_1e9jm180 fx_5f52664e_1e9jm182';
+// 2026-08-01(토)부터 31일까지의 요일
+const AUG_2026_WEEKDAYS = '토일월화수목금토일월화수목금토일월화수목금토일월화수목금토일월'.split('');
+// 주말 + 8/17 광복절 대체공휴일
+const AUG_2026_HOLIDAYS = new Set([1, 2, 8, 9, 15, 16, 17, 22, 23, 29, 30]);
+
+function augCells({ holidayStylingApplied = true } = {}) {
+  return AUG_2026_WEEKDAYS.map((weekday, index) => {
+    const day = index + 1;
+    const marked = holidayStylingApplied && AUG_2026_HOLIDAYS.has(day);
+    return { text: `${day}${weekday}`, className: marked ? HOLIDAY_CELL_CLASS : PLAIN_CELL_CLASS };
+  });
+}
+
+test('parseDayCell reads the day number, weekday and holiday marker from a real cell', () => {
+  assert.deepEqual(lib.parseDayCell({ text: '17월', className: HOLIDAY_CELL_CLASS }), {
+    day: 17,
+    weekday: '월',
+    markedHoliday: true,
+    label: '',
+    labelKind: 'none',
+    isHoliday: true,
+    reason: 'holiday',
+  });
+});
+
+test('parseDayCell treats 토/일 as holidays even without the marker class', () => {
+  assert.equal(lib.parseDayCell({ text: '15 토', className: PLAIN_CELL_CLASS }).isHoliday, true);
+  assert.equal(lib.parseDayCell({ text: '16 일', className: PLAIN_CELL_CLASS }).isHoliday, true);
+});
+
+test('parseDayCell does not treat a plain weekday as a holiday', () => {
+  assert.equal(lib.parseDayCell({ text: '18화', className: PLAIN_CELL_CLASS }).isHoliday, false);
+});
+
+test('parseDayCell returns null for non day cells', () => {
+  assert.equal(lib.parseDayCell({ text: '7:57', className: PLAIN_CELL_CLASS }), null);
+  assert.equal(lib.parseDayCell({ text: '', className: '' }), null);
+});
+
+test('analyzeDayCells marks 8/17 (substitute holiday for 광복절) as a holiday', () => {
+  const { days, holidayStylingReady } = lib.analyzeDayCells(augCells());
+  assert.equal(holidayStylingReady, true);
+  assert.equal(days.length, 31);
+  assert.equal(days.find((d) => d.day === 17).isHoliday, true);
+  assert.equal(days.find((d) => d.day === 18).isHoliday, false);
+  assert.equal(days.filter((d) => d.isHoliday).length, 11);
+});
+
+test('analyzeDayCells reports holiday styling as not ready when Sundays lack the marker', () => {
+  const { days, holidayStylingReady } = lib.analyzeDayCells(
+    augCells({ holidayStylingApplied: false })
+  );
+  assert.equal(holidayStylingReady, false);
+  // 마커가 없어도 주말은 요일 문자로 휴일 처리되고, 공휴일만 판정이 불가능하다
+  assert.equal(days.find((d) => d.day === 16).isHoliday, true);
+  assert.equal(days.find((d) => d.day === 17).isHoliday, false);
+});
+
+test('classifyDayRowLabel returns none for a plain row', () => {
+  assert.deepEqual(lib.classifyDayRowLabel('20목0:00'), { label: '', kind: 'none' });
+  assert.deepEqual(lib.classifyDayRowLabel('5수7:57'), { label: '', kind: 'none' });
+});
+
+test('classifyDayRowLabel flags full-day leave rows', () => {
+  assert.deepEqual(lib.classifyDayRowLabel('20목0:00연차'), { label: '연차', kind: 'leave' });
+  assert.equal(lib.classifyDayRowLabel('21금 0:00 여름휴가').kind, 'leave');
+  assert.equal(lib.classifyDayRowLabel('24월0:00특별휴무').kind, 'leave');
+  assert.equal(lib.classifyDayRowLabel('25화0:00공가').kind, 'leave');
+});
+
+test('classifyDayRowLabel keeps partial leave and work-away rows as work days', () => {
+  assert.deepEqual(lib.classifyDayRowLabel('20목4:00반차'), { label: '반차', kind: 'work' });
+  assert.equal(lib.classifyDayRowLabel('20목4:00오전 반차').kind, 'work');
+  assert.equal(lib.classifyDayRowLabel('20목8:00재택근무').kind, 'work');
+  assert.equal(lib.classifyDayRowLabel('20목8:00출장').kind, 'work');
+});
+
+test('classifyDayRowLabel reports unclassified labels instead of silently guessing', () => {
+  assert.deepEqual(lib.classifyDayRowLabel('20목0:00무슨항목'), {
+    label: '무슨항목',
+    kind: 'unknown',
+  });
+});
+
+test('parseDayCell excludes a weekday with a full-day leave label', () => {
+  const cell = { text: '20목', className: PLAIN_CELL_CLASS, rowText: '20목0:00연차' };
+  assert.deepEqual(lib.parseDayCell(cell), {
+    day: 20,
+    weekday: '목',
+    markedHoliday: false,
+    label: '연차',
+    labelKind: 'leave',
+    isHoliday: true,
+    reason: 'leave',
+  });
+});
+
+test('parseDayCell keeps a weekday with a 반차 label as a work day', () => {
+  const cell = { text: '20목', className: PLAIN_CELL_CLASS, rowText: '20목4:00반차' };
+  assert.equal(lib.parseDayCell(cell).isHoliday, false);
+});
+
+test('2026-08 regression: 8/20 연차 -> one fewer work day, Need 8h 29m/day', () => {
+  const cells = augCells().map((cell, index) =>
+    index + 1 === 20 ? Object.assign({}, cell, { rowText: '20목0:00연차' }) : cell
+  );
+  const { days, unknownLabels } = lib.analyzeDayCells(cells);
+  assert.deepEqual(unknownLabels, []);
+  assert.equal(days.find((d) => d.day === 20).reason, 'leave');
+  const dayDates = days.map((d) => ({ date: new Date(2026, 7, d.day), isHoliday: d.isHoliday }));
+  const from = lib.resolveCountStartDate(new Date(2026, 7, 5, 20, 38), 7 * 60 + 57);
+  const remainingDays = lib.countRemainingWorkDays(dayDates, from, new Date(2026, 7, 31));
+  assert.equal(remainingDays, 16);
+  assert.equal(lib.buildCompactMessage(135 * 60 + 41, remainingDays), 'Need 8h 29m/day (16d)');
+});
+
+test('analyzeDayCells collects unknown labels for the console warning', () => {
+  const cells = augCells().map((cell, index) =>
+    index + 1 === 20 ? Object.assign({}, cell, { rowText: '20목0:00알수없는항목' }) : cell
+  );
+  const { days, unknownLabels } = lib.analyzeDayCells(cells);
+  assert.deepEqual(unknownLabels, ['20(알수없는항목)']);
+  // 분류 못 한 라벨은 근무일로 유지
+  assert.equal(days.find((d) => d.day === 20).isHoliday, false);
+});
+
+test('analyzeDayCells merges duplicate cells for the same day, preferring the holiday verdict', () => {
+  const cells = [
+    { text: '17월', className: PLAIN_CELL_CLASS },
+    { text: '17월', className: HOLIDAY_CELL_CLASS },
+    { text: '18화', className: PLAIN_CELL_CLASS },
+  ];
+  const { days } = lib.analyzeDayCells(cells);
+  assert.equal(days.length, 2);
+  assert.equal(days.find((d) => d.day === 17).isHoliday, true);
+});
+
+test('resolveCountStartDate skips today when today already has recorded work time', () => {
+  const from = lib.resolveCountStartDate(new Date(2026, 7, 5, 20, 38), 7 * 60 + 57);
+  assert.equal(from.getDate(), 6);
+  assert.equal(from.getMonth(), 7);
+});
+
+test('resolveCountStartDate keeps today when no work time is recorded yet', () => {
+  assert.equal(lib.resolveCountStartDate(new Date(2026, 7, 5, 9, 0), 0).getDate(), 5);
+  assert.equal(lib.resolveCountStartDate(new Date(2026, 7, 5, 9, 0), null).getDate(), 5);
+});
+
+test('resolveCountStartDate rolls into the next month on the last day', () => {
+  const from = lib.resolveCountStartDate(new Date(2026, 7, 31, 20, 0), 480);
+  assert.equal(from.getMonth(), 8);
+  assert.equal(from.getDate(), 1);
+});
+
+test('2026-08 regression: today already worked -> 17 work days left, Need 7h 59m/day', () => {
+  const { days } = lib.analyzeDayCells(augCells());
+  const dayDates = days.map((d) => ({ date: new Date(2026, 7, d.day), isHoliday: d.isHoliday }));
+  const from = lib.resolveCountStartDate(new Date(2026, 7, 5, 20, 38), 7 * 60 + 57);
+  const remainingDays = lib.countRemainingWorkDays(dayDates, from, new Date(2026, 7, 31));
+  assert.equal(remainingDays, 17);
+  assert.equal(lib.buildCompactMessage(135 * 60 + 41, remainingDays), 'Need 7h 59m/day (17d)');
+});
+
+test('2026-08 regression: today not worked yet -> 18 work days left, Need 7h 33m/day', () => {
+  const { days } = lib.analyzeDayCells(augCells());
+  const dayDates = days.map((d) => ({ date: new Date(2026, 7, d.day), isHoliday: d.isHoliday }));
+  const from = lib.resolveCountStartDate(new Date(2026, 7, 5, 9, 0), 0);
+  const remainingDays = lib.countRemainingWorkDays(dayDates, from, new Date(2026, 7, 31));
+  assert.equal(remainingDays, 18);
+  assert.equal(lib.buildCompactMessage(135 * 60 + 41, remainingDays), 'Need 7h 33m/day (18d)');
+});
+
 test('parsePeriodRange parses a same-year range', () => {
   const range = lib.parsePeriodRange('2026. 7. 1 – 7. 31');
   assert.equal(range.startDate.getFullYear(), 2026);
@@ -159,7 +335,7 @@ test('formatCompactRemaining formats minutes only when under an hour', () => {
 });
 
 test('buildCompactMessage builds the ok message', () => {
-  assert.equal(lib.buildCompactMessage(2163, 5), 'Need 7h 13m/day');
+  assert.equal(lib.buildCompactMessage(2163, 5), 'Need 7h 13m/day (5d)');
 });
 
 test('buildCompactMessage builds the done message', () => {
