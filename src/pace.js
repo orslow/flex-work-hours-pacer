@@ -22,23 +22,6 @@ function extractRequiredRemainingMinutes(widgetText) {
 // 배포마다 바뀌므로 variant 이름 부분만 확인함.
 var HOLIDAY_MARKER_PATTERN = /colorType-holiday(?![\w-])/;
 var DAY_CELL_PATTERN = /^(\d{1,2})([월화수목금토일])$/;
-// 종일 쉬는 항목 -> 근무일에서 제외
-var LEAVE_LABEL_PATTERN = /(연차|휴가|휴무|공가|병가|경조|안식)/;
-// 일해야 하는(또는 일부만 쉬는) 항목 -> 근무일로 유지. 휴가 패턴보다 먼저 확인함
-var WORKING_LABEL_PATTERN = /(반차|반일|시간연차|시간휴가|조퇴|외출|지각|재택|출장|외근|교육|당직|근무)/;
-
-function classifyDayRowLabel(rowText) {
-  // 날짜 라벨(예: 20목)과 시간 값(예: 0:00)을 걷어낸 나머지 텍스트가 휴가 항목 라벨임
-  var rest = String(rowText == null ? '' : rowText)
-    .replace(/\d{1,2}\s*[월화수목금토일]/, ' ')
-    .replace(/-?\d{1,3}:\d{2}/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!rest) return { label: '', kind: 'none' };
-  if (WORKING_LABEL_PATTERN.test(rest)) return { label: rest, kind: 'work' };
-  if (LEAVE_LABEL_PATTERN.test(rest)) return { label: rest, kind: 'leave' };
-  return { label: rest, kind: 'unknown' };
-}
 
 function parseDayCell(cell) {
   var text = String(cell && cell.text != null ? cell.text : '').replace(/\s+/g, '');
@@ -46,18 +29,32 @@ function parseDayCell(cell) {
   if (!m) return null;
   var weekday = m[2];
   var markedHoliday = HOLIDAY_MARKER_PATTERN.test(String((cell && cell.className) || ''));
-  var isWeekend = weekday === '토' || weekday === '일';
-  var labelInfo = classifyDayRowLabel(cell && cell.rowText);
-  var isLeave = labelInfo.kind === 'leave';
+  // 주말은 요일 문자로 확정하므로 휴일 스타일이 아직 적용되지 않아도 근무일로 세지 않음
+  var isHoliday = weekday === '토' || weekday === '일' || markedHoliday;
+  var workMinutes =
+    cell && typeof cell.workMinutes === 'number' ? cell.workMinutes : null;
+  var isWorkingNow = !!(cell && cell.isWorkingNow);
+  // 행의 근무시간 칩에 이미 시간이 들어있으면 그 시간은 위젯의 실근무/잔여 필수 시간에 이미
+  // 반영된 상태다. 지난 근무일이든, 아직 오지 않은 연차(flex.team이 예정 연차를 실근무에 미리
+  // 얹는다)든 마찬가지이므로 남은 근무일에서 뺀다. 근무 중인 오늘은 칩이 0:00이지만, 혹시
+  // 실시간으로 채워지더라도 아직 미확정이므로 예외로 둔다.
+  var prescheduled = !isWorkingNow && workMinutes !== null && workMinutes > 0;
   return {
     day: parseInt(m[1], 10),
     weekday: weekday,
     markedHoliday: markedHoliday,
-    label: labelInfo.label,
-    labelKind: labelInfo.kind,
-    // 주말은 요일 문자로 확정하므로 휴일 스타일이 아직 적용되지 않아도 근무일로 세지 않음
-    isHoliday: isWeekend || markedHoliday || isLeave,
-    reason: isWeekend ? 'weekend' : markedHoliday ? 'holiday' : isLeave ? 'leave' : null,
+    workMinutes: workMinutes,
+    isWorkingNow: isWorkingNow,
+    isHoliday: isHoliday,
+    isPrescheduled: prescheduled,
+    isWorkDay: !isHoliday && !prescheduled,
+    reason: weekday === '토' || weekday === '일'
+      ? 'weekend'
+      : markedHoliday
+        ? 'holiday'
+        : prescheduled
+          ? 'prescheduled'
+          : null,
   };
 }
 
@@ -71,8 +68,10 @@ function analyzeDayCells(cells) {
     // 날짜 기준으로 합치고, 판정이 엇갈리면 휴일 쪽을 택함
     if (seen[info.day]) {
       var kept = seen[info.day];
-      if (info.isHoliday && !kept.isHoliday) {
-        kept.isHoliday = true;
+      if (!info.isWorkDay && kept.isWorkDay) {
+        kept.isWorkDay = false;
+        kept.isHoliday = info.isHoliday;
+        kept.isPrescheduled = info.isPrescheduled;
         kept.reason = info.reason;
       }
       kept.markedHoliday = kept.markedHoliday || info.markedHoliday;
@@ -90,18 +89,7 @@ function analyzeDayCells(cells) {
   }
   // 일요일 셀에 휴일 마커가 하나라도 빠져 있으면 휴일 정보가 아직 안 붙은(또는 마커 이름이 바뀐)
   // 상태로 본다. 그 상태로 계산하면 공휴일이 근무일로 잡혀 하루 필요시간이 과소평가됨.
-  return {
-    days: days,
-    holidayStylingReady: sundays > 0 && markedSundays === sundays,
-    // 휴가/근무 어느 쪽으로도 분류하지 못한 라벨. 근무일로 세되 콘솔에 남겨 분류를 보완함
-    unknownLabels: days
-      .filter(function (d) {
-        return d.labelKind === 'unknown';
-      })
-      .map(function (d) {
-        return d.day + '(' + d.label + ')';
-      }),
-  };
+  return { days: days, holidayStylingReady: sundays > 0 && markedSundays === sundays };
 }
 
 function parsePeriodRange(periodText) {
@@ -123,33 +111,9 @@ function stripTime(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function nextDay(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-}
-
-// 오늘을 남은 근무일에 넣을지 판단함.
-// - 근무 중(boxType-realtimeWorkActive)이면 오늘 근무는 미확정이므로 포함
-// - 근무 기록이 이미 찍혀 있으면(퇴근 후 칩에 값이 들어옴) 오늘 몫은 위젯의 잔여 필수 시간에
-//   이미 반영된 것으로 보고 제외
-// - 기록이 없으면(0:00) 아직 일할 수 있는 날이므로 포함
-function resolveCountStartDate(today, todayWorkedMinutes, todayInProgress) {
-  var base = stripTime(today);
-  if (todayInProgress) return base;
-  return typeof todayWorkedMinutes === 'number' && todayWorkedMinutes > 0 ? nextDay(base) : base;
-}
-
-// 캘린더가 오늘이 속한 달을 보여줄 때만 오늘의 날짜 숫자를 반환. boxType-today 마커를 못 찾았을 때
-// 날짜 숫자로 오늘 행을 찾는 폴백에 사용함.
-function resolveTodayDayNumber(referenceDate, today) {
-  if (
-    referenceDate.getFullYear() !== today.getFullYear() ||
-    referenceDate.getMonth() !== today.getMonth()
-  ) {
-    return null;
-  }
-  return today.getDate();
-}
-
+// 오늘(포함)부터 정산기간 종료일까지, 아직 근무가 필요한 날의 수.
+// 오늘도 특별 취급 없이 같은 규칙으로 판정한다: 퇴근해서 칩에 시간이 들어오면 그 순간 제외되고,
+// 근무 중(칩 0:00)이거나 미출근이면 포함된다.
 function countRemainingWorkDays(dayInfos, fromDate, endDate) {
   var fromStripped = stripTime(fromDate);
   var endStripped = stripTime(endDate);
@@ -159,7 +123,7 @@ function countRemainingWorkDays(dayInfos, fromDate, endDate) {
     if (
       d.getTime() >= fromStripped.getTime() &&
       d.getTime() <= endStripped.getTime() &&
-      !dayInfos[i].isHoliday
+      dayInfos[i].isWorkDay
     ) {
       count++;
     }
@@ -215,14 +179,10 @@ function buildCompactMessage(remainingMinutes, remainingDays) {
 var FlexPacerLib = {
   parseTimeToMinutes: parseTimeToMinutes,
   extractRequiredRemainingMinutes: extractRequiredRemainingMinutes,
-  classifyDayRowLabel: classifyDayRowLabel,
   parseDayCell: parseDayCell,
   analyzeDayCells: analyzeDayCells,
   parsePeriodRange: parsePeriodRange,
   stripTime: stripTime,
-  nextDay: nextDay,
-  resolveTodayDayNumber: resolveTodayDayNumber,
-  resolveCountStartDate: resolveCountStartDate,
   countRemainingWorkDays: countRemainingWorkDays,
   computePace: computePace,
   formatMinutesAsHM: formatMinutesAsHM,

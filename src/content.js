@@ -70,59 +70,42 @@
         element: triggers[i],
       };
       if (!lib.parseDayCell(cell)) continue;
-      // 행 전체 텍스트에는 연차/휴가 같은 근태 항목 라벨이 함께 들어온다
       var context = findRowContext(triggers[i]);
-      cell.rowText = context ? context.row.textContent || '' : '';
       cell.workMinutes = context ? context.workMinutes : null;
-      // 오늘 셀 마커는 상태에 따라 두 가지다: 근무 중이면 boxType-realtimeWorkActive,
-      // 그 외(미출근/퇴근 후)에는 boxType-today
+      // 근무 중인 오늘 셀에는 boxType-realtimeWorkActive가 붙는다 (그 외에는 boxType-today).
+      // 근무 중에는 칩이 0:00이지만, 실시간으로 채워지더라도 오늘을 빼지 않기 위한 신호로 씀.
       cell.isWorkingNow = !!triggers[i].querySelector('[class*="boxType-realtimeWorkActive"]');
-      cell.isToday =
-        cell.isWorkingNow || !!triggers[i].querySelector('[class*="boxType-today"]');
       cells.push(cell);
     }
     return cells;
   }
 
-  // 두 마커(boxType-today / boxType-realtimeWorkActive) 중 어느 것도 없는 경우를 대비해
-  // (달력이 오늘이 속한 달을 보여줄 때만) 날짜 숫자로 한 번 더 찾음. 오늘을 못 찾으면 오늘을
-  // 포함하는 쪽으로 떨어지는데, 이미 근무를 마친 날이면 값이 낙관적으로 나오므로 경고를 남김.
-  function findTodayCell(cells, referenceDate) {
-    for (var i = 0; i < cells.length; i++) {
-      if (cells[i].isToday) return cells[i];
-    }
-    var todayDay = lib.resolveTodayDayNumber(referenceDate, new Date());
-    if (todayDay === null) return null;
-    for (var j = 0; j < cells.length; j++) {
-      var info = lib.parseDayCell(cells[j]);
-      if (info && info.day === todayDay) {
-        console.warn(
-          '[flex-pacer] no today marker found; matched today by date instead (day ' + todayDay + ')'
-        );
-        return cells[j];
-      }
-    }
-    return null;
-  }
-
   // 콘솔 확인용: 카운트 구간에서 제외된 날과 그 이유
-  function describeExcludedDays(days, fromDate, endDate) {
-    var from = lib.stripTime(fromDate).getDate();
-    var to = lib.stripTime(endDate).getDate();
+  function describeExcludedDays(dayDates) {
     var parts = [];
-    for (var i = 0; i < days.length; i++) {
-      var d = days[i];
-      if (!d.isHoliday || d.day < from || d.day > to) continue;
-      parts.push(d.day + ':' + d.reason + (d.label ? '(' + d.label + ')' : ''));
+    for (var i = 0; i < dayDates.length; i++) {
+      var d = dayDates[i];
+      if (d.isWorkDay || !d.inRange) continue;
+      var detail = d.reason === 'prescheduled' ? '(' + d.workMinutes + 'm)' : '';
+      parts.push(d.date.getDate() + ':' + d.reason + detail);
     }
     return parts.join(' ');
   }
 
-  function buildDayDates(days, referenceDate) {
+  function buildDayDates(days, referenceDate, fromDate, endDate) {
     var year = referenceDate.getFullYear();
     var month = referenceDate.getMonth();
+    var from = lib.stripTime(fromDate).getTime();
+    var to = lib.stripTime(endDate).getTime();
     return days.map(function (info) {
-      return { date: new Date(year, month, info.day), isHoliday: info.isHoliday };
+      var date = new Date(year, month, info.day);
+      return {
+        date: date,
+        isWorkDay: info.isWorkDay,
+        reason: info.reason,
+        workMinutes: info.workMinutes,
+        inRange: date.getTime() >= from && date.getTime() <= to,
+      };
     });
   }
 
@@ -183,31 +166,14 @@
       return;
     }
 
-    var todayCell = findTodayCell(dayCells, range.startDate);
-    if (!todayCell) {
-      console.warn(
-        '[flex-pacer] could not locate today in the calendar; counting today as a remaining work day'
-      );
-    }
-    var todayWorkedMinutes = todayCell ? todayCell.workMinutes : null;
-    var todayInProgress = !!(todayCell && todayCell.isWorkingNow);
-    var fromDate = lib.resolveCountStartDate(new Date(), todayWorkedMinutes, todayInProgress);
-    var dayDates = buildDayDates(analysis.days, range.startDate);
+    var fromDate = new Date();
+    var dayDates = buildDayDates(analysis.days, range.startDate, fromDate, range.endDate);
     var remainingDays = lib.countRemainingWorkDays(dayDates, fromDate, range.endDate);
 
-    if (analysis.unknownLabels.length) {
-      // 분류 못 한 근태 라벨은 근무일로 세므로, 실제로 쉬는 항목이면 값이 낙관적으로 나온다
-      console.warn(
-        '[flex-pacer] unrecognized day labels, counted as work days: ' +
-          analysis.unknownLabels.join(', ')
-      );
-    }
     console.debug(
-      '[flex-pacer] remaining=' + remainingMinutes + 'm, todayWorked=' +
-        (todayWorkedMinutes === null ? 'unknown' : todayWorkedMinutes + 'm') +
-        ', workingNow=' + todayInProgress +
-        ', countingFrom=' + fromDate.toDateString() + ', workDays=' + remainingDays +
-        ', excluded=' + describeExcludedDays(analysis.days, fromDate, range.endDate)
+      '[flex-pacer] remaining=' + remainingMinutes + 'm, countingFrom=' +
+        lib.stripTime(fromDate).toDateString() + ', workDays=' + remainingDays +
+        ', excluded=' + describeExcludedDays(dayDates)
     );
     insertOrUpdateCompactIndicator(lib.buildCompactMessage(remainingMinutes, remainingDays));
   }
