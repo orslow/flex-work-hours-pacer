@@ -74,17 +74,33 @@
       var context = findRowContext(triggers[i]);
       cell.rowText = context ? context.row.textContent || '' : '';
       cell.workMinutes = context ? context.workMinutes : null;
-      cell.isToday = !!triggers[i].querySelector('[class*="boxType-today"]');
+      // 오늘 셀 마커는 상태에 따라 두 가지다: 근무 중이면 boxType-realtimeWorkActive,
+      // 그 외(미출근/퇴근 후)에는 boxType-today
+      cell.isWorkingNow = !!triggers[i].querySelector('[class*="boxType-realtimeWorkActive"]');
+      cell.isToday =
+        cell.isWorkingNow || !!triggers[i].querySelector('[class*="boxType-today"]');
       cells.push(cell);
     }
     return cells;
   }
 
-  // 오늘 셀은 하위 요소에 boxType-today variant 클래스가 붙는다. 못 찾으면 null을 반환해
-  // 오늘을 남은 근무일에 포함하는 기존 동작으로 떨어짐.
-  function findTodayWorkedMinutes(cells) {
+  // 두 마커(boxType-today / boxType-realtimeWorkActive) 중 어느 것도 없는 경우를 대비해
+  // (달력이 오늘이 속한 달을 보여줄 때만) 날짜 숫자로 한 번 더 찾음. 오늘을 못 찾으면 오늘을
+  // 포함하는 쪽으로 떨어지는데, 이미 근무를 마친 날이면 값이 낙관적으로 나오므로 경고를 남김.
+  function findTodayCell(cells, referenceDate) {
     for (var i = 0; i < cells.length; i++) {
-      if (cells[i].isToday) return cells[i].workMinutes;
+      if (cells[i].isToday) return cells[i];
+    }
+    var todayDay = lib.resolveTodayDayNumber(referenceDate, new Date());
+    if (todayDay === null) return null;
+    for (var j = 0; j < cells.length; j++) {
+      var info = lib.parseDayCell(cells[j]);
+      if (info && info.day === todayDay) {
+        console.warn(
+          '[flex-pacer] no today marker found; matched today by date instead (day ' + todayDay + ')'
+        );
+        return cells[j];
+      }
     }
     return null;
   }
@@ -167,8 +183,15 @@
       return;
     }
 
-    var todayWorkedMinutes = findTodayWorkedMinutes(dayCells);
-    var fromDate = lib.resolveCountStartDate(new Date(), todayWorkedMinutes);
+    var todayCell = findTodayCell(dayCells, range.startDate);
+    if (!todayCell) {
+      console.warn(
+        '[flex-pacer] could not locate today in the calendar; counting today as a remaining work day'
+      );
+    }
+    var todayWorkedMinutes = todayCell ? todayCell.workMinutes : null;
+    var todayInProgress = !!(todayCell && todayCell.isWorkingNow);
+    var fromDate = lib.resolveCountStartDate(new Date(), todayWorkedMinutes, todayInProgress);
     var dayDates = buildDayDates(analysis.days, range.startDate);
     var remainingDays = lib.countRemainingWorkDays(dayDates, fromDate, range.endDate);
 
@@ -180,8 +203,10 @@
       );
     }
     console.debug(
-      '[flex-pacer] remaining=' + remainingMinutes + 'm, todayWorked=' + todayWorkedMinutes +
-        'm, countingFrom=' + fromDate.toDateString() + ', workDays=' + remainingDays +
+      '[flex-pacer] remaining=' + remainingMinutes + 'm, todayWorked=' +
+        (todayWorkedMinutes === null ? 'unknown' : todayWorkedMinutes + 'm') +
+        ', workingNow=' + todayInProgress +
+        ', countingFrom=' + fromDate.toDateString() + ', workDays=' + remainingDays +
         ', excluded=' + describeExcludedDays(analysis.days, fromDate, range.endDate)
     );
     insertOrUpdateCompactIndicator(lib.buildCompactMessage(remainingMinutes, remainingDays));

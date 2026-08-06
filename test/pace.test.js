@@ -143,6 +143,15 @@ test('parseDayCell keeps a weekday with a 반차 label as a work day', () => {
   assert.equal(lib.parseDayCell(cell).isHoliday, false);
 });
 
+test('2026-08 regression: 8/6 in progress -> today still counts, 17 work days left', () => {
+  const { days } = lib.analyzeDayCells(augCells());
+  const dayDates = days.map((d) => ({ date: new Date(2026, 7, d.day), isHoliday: d.isHoliday }));
+  const from = lib.resolveCountStartDate(new Date(2026, 7, 6, 10, 20), 0, true);
+  const remainingDays = lib.countRemainingWorkDays(dayDates, from, new Date(2026, 7, 31));
+  assert.equal(remainingDays, 17);
+  assert.equal(lib.buildCompactMessage(135 * 60 + 41, remainingDays), 'Need 7h 59m/day (17d)');
+});
+
 test('2026-08 regression: 8/20 연차 -> one fewer work day, Need 8h 29m/day', () => {
   const cells = augCells().map((cell, index) =>
     index + 1 === 20 ? Object.assign({}, cell, { rowText: '20목0:00연차' }) : cell
@@ -187,6 +196,20 @@ test('resolveCountStartDate skips today when today already has recorded work tim
 test('resolveCountStartDate keeps today when no work time is recorded yet', () => {
   assert.equal(lib.resolveCountStartDate(new Date(2026, 7, 5, 9, 0), 0).getDate(), 5);
   assert.equal(lib.resolveCountStartDate(new Date(2026, 7, 5, 9, 0), null).getDate(), 5);
+});
+
+test('resolveCountStartDate keeps today while work is in progress, even with recorded time', () => {
+  assert.equal(lib.resolveCountStartDate(new Date(2026, 7, 6, 10, 20), 0, true).getDate(), 6);
+  assert.equal(lib.resolveCountStartDate(new Date(2026, 7, 6, 15, 0), 300, true).getDate(), 6);
+});
+
+test('resolveTodayDayNumber returns the day number when the calendar shows this month', () => {
+  assert.equal(lib.resolveTodayDayNumber(new Date(2026, 7, 1), new Date(2026, 7, 6, 9, 55)), 6);
+});
+
+test('resolveTodayDayNumber returns null when the calendar shows another month', () => {
+  assert.equal(lib.resolveTodayDayNumber(new Date(2026, 6, 1), new Date(2026, 7, 6)), null);
+  assert.equal(lib.resolveTodayDayNumber(new Date(2025, 7, 1), new Date(2026, 7, 6)), null);
 });
 
 test('resolveCountStartDate rolls into the next month on the last day', () => {

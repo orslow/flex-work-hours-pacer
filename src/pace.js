@@ -127,11 +127,27 @@ function nextDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
 }
 
-// 오늘 근무 기록이 이미 찍혀 있으면 오늘 몫은 위젯의 잔여 필수 시간에 이미 반영된 것으로 보고
-// 남은 근무일에서 오늘을 제외함. 기록이 없으면(0:00) 오늘도 아직 일할 수 있는 날로 봄.
-function resolveCountStartDate(today, todayWorkedMinutes) {
+// 오늘을 남은 근무일에 넣을지 판단함.
+// - 근무 중(boxType-realtimeWorkActive)이면 오늘 근무는 미확정이므로 포함
+// - 근무 기록이 이미 찍혀 있으면(퇴근 후 칩에 값이 들어옴) 오늘 몫은 위젯의 잔여 필수 시간에
+//   이미 반영된 것으로 보고 제외
+// - 기록이 없으면(0:00) 아직 일할 수 있는 날이므로 포함
+function resolveCountStartDate(today, todayWorkedMinutes, todayInProgress) {
   var base = stripTime(today);
+  if (todayInProgress) return base;
   return typeof todayWorkedMinutes === 'number' && todayWorkedMinutes > 0 ? nextDay(base) : base;
+}
+
+// 캘린더가 오늘이 속한 달을 보여줄 때만 오늘의 날짜 숫자를 반환. boxType-today 마커를 못 찾았을 때
+// 날짜 숫자로 오늘 행을 찾는 폴백에 사용함.
+function resolveTodayDayNumber(referenceDate, today) {
+  if (
+    referenceDate.getFullYear() !== today.getFullYear() ||
+    referenceDate.getMonth() !== today.getMonth()
+  ) {
+    return null;
+  }
+  return today.getDate();
 }
 
 function countRemainingWorkDays(dayInfos, fromDate, endDate) {
@@ -205,6 +221,7 @@ var FlexPacerLib = {
   parsePeriodRange: parsePeriodRange,
   stripTime: stripTime,
   nextDay: nextDay,
+  resolveTodayDayNumber: resolveTodayDayNumber,
   resolveCountStartDate: resolveCountStartDate,
   countRemainingWorkDays: countRemainingWorkDays,
   computePace: computePace,
