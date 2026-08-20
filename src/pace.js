@@ -61,7 +61,9 @@ function buildDaysFromApi(input) {
     } else if (!attribute.usualWorkingMinutes) {
       reason = 'NO_USUAL_MINUTES';
     } else if (summary.hasOpenWorkBlock) {
-      // 근무 중이면 아직 인정근무에 반영되지 않았으므로 남은 근무일로 센다
+      // 방어용 경로. 근무 중인 하루는 timeBlocks가 빈 배열로 오는 것으로 확인됐고(퇴근 시점에
+      // 블록이 생김) 그 경우는 인정근무 0으로 자연히 포함된다. 진행 중 블록이 내려오는 형태로
+      // 바뀌더라도 오늘이 분모에서 빠지지 않게 남겨둠
       reason = null;
     } else if (summary.timeOffMinutes > 0) {
       reason = 'TIME_OFF';
