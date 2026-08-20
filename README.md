@@ -18,12 +18,6 @@ DOM을 읽지 않고 flex.team이 페이지를 그릴 때 쓰는 내부 API를 �
   - 예외: 끝 타임스탬프가 없는 `WORK` 블록이 있으면 근무 중으로 보고 포함합니다.
 - **하루 평균 필요시간** = 잔여 필수 근무시간 / 남은 근무일수 (올림)
 
-### flex의 추천값을 쓰지 않는 이유
-
-같은 응답에 `remainingDaysByEndDateOfWorkingPeriod`와 `recommendDailyWorkingMinutes`가 들어 있지만 쓰지 않습니다. flex는 **근무가 끝난 오늘도 남은 근무일에 포함**합니다. 실측 예로 2026-08-19 저녁(507분 근무 후 퇴근 완료) 시점에 flex는 9일 / 400분(6h 40m)을 내려줬지만, 끝난 날을 빼면 8일 / 451분(7h 31m)이 맞습니다. 하루 50분을 낙관적으로 보여주는 셈입니다.
-
-자세한 설계는 [`docs/superpowers/specs`](docs/superpowers/specs), 구현 계획은 [`docs/superpowers/plans`](docs/superpowers/plans)를 참고하세요.
-
 ## 설치 (개발자 모드로 로컬 로드)
 
 이 저장소는 스토어에 배포하지 않고, 로컬에서 직접 로드해서 사용하는 걸 전제로 합니다.
