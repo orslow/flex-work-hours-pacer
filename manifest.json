@@ -3,10 +3,11 @@
   "name": "Flex 근무시간 페이스메이커",
   "version": "0.1.0",
   "description": "flex.team 내 근무 페이지에서 잔여 필수 근무시간과 남은 근무일 기준 하루 평균 근무시간을 배너로 보여줍니다.",
+  "host_permissions": ["https://flex.team/*"],
   "content_scripts": [
     {
       "matches": ["https://flex.team/*"],
-      "js": ["src/pace.js", "src/content.js"],
+      "js": ["src/pace.js", "src/flex-api.js", "src/content.js"],
       "css": ["src/banner.css"],
       "run_at": "document_idle"
     }
