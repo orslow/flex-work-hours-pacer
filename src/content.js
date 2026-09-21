@@ -35,15 +35,29 @@
     return true;
   }
 
+  function inRange(day, fromDate, endDate) {
+    var time = day.date.getTime();
+    return time >= lib.stripTime(fromDate).getTime() && time <= lib.stripTime(endDate).getTime();
+  }
+
   function describeExcludedDays(days, fromDate, endDate) {
-    var from = lib.stripTime(fromDate).getTime();
-    var to = lib.stripTime(endDate).getTime();
     var parts = [];
     for (var i = 0; i < days.length; i++) {
       var day = days[i];
-      var time = day.date.getTime();
-      if (day.isWorkDay || time < from || time > to) continue;
+      if (day.isWorkDay || !inRange(day, fromDate, endDate)) continue;
       parts.push(day.isoDate.slice(5) + ':' + day.reason);
+    }
+    return parts.join(' ');
+  }
+
+  // 분모에는 남았지만 휴가가 일부 걸린 날. 온전한 하루로 세므로 그만큼 페이스가 낙관적이다.
+  // 시차/반차 응답을 실제로 확인하지 못한 상태라, 여기 찍히는 숫자가 유일한 관측 수단이다.
+  function describePartialLeaveDays(days, fromDate, endDate) {
+    var parts = [];
+    for (var i = 0; i < days.length; i++) {
+      var day = days[i];
+      if (!day.isWorkDay || !day.timeOffMinutes || !inRange(day, fromDate, endDate)) continue;
+      parts.push(day.isoDate.slice(5) + ':' + day.timeOffMinutes + 'm/' + day.usualWorkingMinutes + 'm');
     }
     return parts.join(' ');
   }
@@ -67,7 +81,8 @@
           '[flex-pacer] period=' + inputs.period.startDate + '..' + inputs.period.endDateInclusive +
             ', remaining=' + inputs.requiredRemainingMinutes + 'm' +
             ', workDays=' + remainingDays +
-            ', excluded=' + describeExcludedDays(inputs.days, now, endDate)
+            ', excluded=' + describeExcludedDays(inputs.days, now, endDate) +
+            ', partialLeave=' + describePartialLeaveDays(inputs.days, now, endDate)
         );
         if (!insertOrUpdateCompactIndicator(message)) {
           // 헤더가 아직 안 그려진 상태. 잠시 뒤 다시 시도

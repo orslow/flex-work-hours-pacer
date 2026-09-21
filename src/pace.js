@@ -1,6 +1,6 @@
 // flex.team API 응답에서 하루 단위 사실을 뽑는다. 판정 근거는 모두 명시적 필드다.
 // - date-attributes[].dayOffs: REST_DAY(토) / WEEKLY_HOLIDAY(일) / CUSTOM_HOLIDAY(공휴일, 대체공휴일)
-// - work-schedules[].timeBlocks: WORK / REST(휴게) / *TIME_OFF(연차 등)
+// - work-schedules[].timeBlocks: WORK / REST(휴게) / *TIME_OFF(연차, 반차, 시차 등)
 function parseIsoDate(text) {
   var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(text == null ? '' : text).trim());
   if (!m) return null;
@@ -19,6 +19,8 @@ function summarizeSchedule(schedule) {
   var workMinutes = 0;
   var timeOffMinutes = 0;
   var hasOpenWorkBlock = false;
+  var hasClosedWorkBlock = false;
+  var hasUnmeasuredAllDayTimeOff = false;
   for (var i = 0; i < blocks.length; i++) {
     var type = String(blocks[i].type || '');
     var value = blocks[i].value || {};
@@ -29,16 +31,40 @@ function summarizeSchedule(schedule) {
         if (type === 'WORK') hasOpenWorkBlock = true;
         continue;
       }
+      if (type === 'WORK') hasClosedWorkBlock = true;
       workMinutes += type === 'WORK' ? minutes : -minutes;
     } else if (type.indexOf('TIME_OFF') !== -1) {
-      timeOffMinutes += typeof value.usedMinutes === 'number' ? value.usedMinutes : 0;
+      if (typeof value.usedMinutes === 'number' && value.usedMinutes > 0) {
+        timeOffMinutes += value.usedMinutes;
+      } else if (value.allDay === true) {
+        // 쓴 시간을 못 읽었는데 종일로 표시된 블록. 합계에는 못 넣으니 따로 기억해둔다
+        hasUnmeasuredAllDayTimeOff = true;
+      }
     }
   }
   return {
     workMinutes: workMinutes,
     timeOffMinutes: timeOffMinutes,
     hasOpenWorkBlock: hasOpenWorkBlock,
+    hasClosedWorkBlock: hasClosedWorkBlock,
+    hasUnmeasuredAllDayTimeOff: hasUnmeasuredAllDayTimeOff,
   };
+}
+
+// 종일 휴가(연차)인지 판정. 쓴 시간이 그 날 소정근로시간을 다 덮으면 종일로 본다.
+// 시차/반차처럼 일부만 쓴 날은 남은 시간만큼 아직 일해야 하므로 종일이 아니다.
+//
+// 판정은 쓴 시간으로 한다. allDay는 시차 블록에도 true로 올 수 있다고 보고(그 블록들은
+// 시작/끝 타임스탬프 없이 내려오므로 "시간대 없음"이라는 뜻일 수 있다) 판정 근거로 쓰지
+// 않는다. 이 둘의 우선순위가 뒤집히면 시차가 다시 종일로 잡혀도 테스트는 다 통과한다.
+// 예외는 쓴 시간을 아예 못 읽은 종일 블록뿐이다. 그건 합계에 안 들어가므로 따로 본다.
+function isFullDayTimeOff(summary, usualWorkingMinutes) {
+  if (summary.hasUnmeasuredAllDayTimeOff) return true;
+  return (
+    summary.timeOffMinutes > 0 &&
+    usualWorkingMinutes > 0 &&
+    summary.timeOffMinutes >= usualWorkingMinutes
+  );
 }
 
 function buildDaysFromApi(input) {
@@ -53,28 +79,36 @@ function buildDaysFromApi(input) {
     var date = parseIsoDate(attribute.date);
     if (!date) continue;
     var dayOffs = attribute.dayOffs || [];
+    var usualWorkingMinutes = attribute.usualWorkingMinutes || 0;
     var summary = summarizeSchedule(byDate[attribute.date]);
     var recognizedMinutes = summary.workMinutes + summary.timeOffMinutes;
     var reason = null;
     if (dayOffs.length) {
       reason = String(dayOffs[0].type || 'DAY_OFF');
-    } else if (!attribute.usualWorkingMinutes) {
+    } else if (!usualWorkingMinutes) {
       reason = 'NO_USUAL_MINUTES';
     } else if (summary.hasOpenWorkBlock) {
       // 방어용 경로. 근무 중인 하루는 timeBlocks가 빈 배열로 오는 것으로 확인됐고(퇴근 시점에
       // 블록이 생김) 그 경우는 인정근무 0으로 자연히 포함된다. 진행 중 블록이 내려오는 형태로
       // 바뀌더라도 오늘이 분모에서 빠지지 않게 남겨둠
       reason = null;
-    } else if (summary.timeOffMinutes > 0) {
+    } else if (isFullDayTimeOff(summary, usualWorkingMinutes)) {
       reason = 'TIME_OFF';
-    } else if (recognizedMinutes > 0) {
+    } else if (summary.hasClosedWorkBlock) {
+      // 끝난 근무 블록이 하나라도 있으면 그 날은 마감된 것으로 본다. 시차를 쓰고 일찍
+      // 퇴근한 날도 여기에 걸리므로 분모에 남아 페이스를 낮게 만들지 않는다.
+      // 합계 분(workMinutes)이 아니라 블록 존재로 보는 이유: 휴게가 근무만큼 길면
+      // 합계가 0이 되는데(13~14시 근무 + 60분 휴게) 그 날도 이미 끝난 날이다.
       reason = 'WORKED';
     }
+    // 시차/반차만 등록돼 있고 근무 기록이 없는 날은 reason이 null로 남아 근무일로 센다.
+    // 잔여 필수 근무시간에서는 그 휴가 시간만큼 이미 빠져 있으므로 중복 차감이 아니다.
     days.push({
       date: date,
       isoDate: attribute.date,
-      usualWorkingMinutes: attribute.usualWorkingMinutes || 0,
+      usualWorkingMinutes: usualWorkingMinutes,
       recognizedMinutes: recognizedMinutes,
+      timeOffMinutes: summary.timeOffMinutes,
       inProgress: summary.hasOpenWorkBlock,
       isWorkDay: reason === null,
       reason: reason,
@@ -155,6 +189,7 @@ function buildCompactMessage(remainingMinutes, remainingDays) {
 var FlexPacerLib = {
   parseIsoDate: parseIsoDate,
   summarizeSchedule: summarizeSchedule,
+  isFullDayTimeOff: isFullDayTimeOff,
   buildDaysFromApi: buildDaysFromApi,
   stripTime: stripTime,
   countRemainingWorkDays: countRemainingWorkDays,

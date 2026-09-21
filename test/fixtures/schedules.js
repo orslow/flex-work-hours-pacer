@@ -55,6 +55,7 @@ function restBlock(isoDate, startHour, minutes) {
   };
 }
 
+// allDay=false는 반차/시차처럼 하루 일부만 쓴 휴가다
 function timeOffBlock(usedMinutes = 480, allDay = true) {
   return {
     type: 'CUSTOM_TIME_OFF',
@@ -63,7 +64,7 @@ function timeOffBlock(usedMinutes = 480, allDay = true) {
       timezoneAtRegistration: TIMEZONE,
       timeOffPolicyId: '100000',
       status: 'APPROVAL_COMPLETED',
-      timeOffRegisterUnit: allDay ? 'DAY' : 'HALF_DAY',
+      timeOffRegisterUnit: allDay ? 'DAY' : usedMinutes >= 240 ? 'HALF_DAY' : 'TIME',
       restMinutes: 0,
       usedMinutes,
       usedPaidMinutes: usedMinutes,
