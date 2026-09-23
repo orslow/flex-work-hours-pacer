@@ -380,14 +380,22 @@ test('resolveRemaining reproduces the 2026-09-23 case: 1291m + 120m 시차 over 
 });
 
 test('the 시차 day already has the add-back banked, so the pace is uniform across days', () => {
-  // 보정 없이 1291/3이면 431분. 시차 날은 120분이 이미 인정돼 311분만 더 채우면 되는데,
-  // 나머지 날은 431분을 다 채워도 총합이 모자람. 보정 후에는 471분 기준으로 어느 날이든 동일함
+  // 보정 없이 1291/3이면 431분/일. 시차 날은 120분이 이미 인정돼 311분만 더 하면 되므로
+  // 나머지 두 날이 431분씩 다 채워도 합이 1173분에 그쳐 잔여 1291분에 모자람.
+  // 보정 후 471분 기준이면 시차 날 351분 + 나머지 두 날 471분씩 = 1293분으로 잔여를 덮는다
   const days = lib.buildDaysFromApi(withSchedule('2026-09-23', [fx.timeOffBlock(120, false)]));
   const resolved = lib.resolveRemaining(1291, days, new Date(2026, 8, 23, 10, 0), new Date(2026, 8, 25));
   const daily = lib.computePace(resolved.remainingMinutes, resolved.remainingDays).dailyMinutes;
   assert.equal(daily, 471);
-  // 시차 날 실제 추가 근무 311분 + 나머지 두 날 471분씩 = 1253분... 반올림 여유분까지 하면 1291분 이상
-  assert.ok(daily - 120 + daily * 2 >= 1291);
+  // 한쪽 부등호만 보면 daily가 부풀어도 통과하므로 위아래를 다 막는다.
+  // 위쪽 여유는 computePace의 ceil 때문이고 살아남은 날마다 1분 미만임
+  const implied = daily - 120 + daily * 2;
+  assert.equal(implied, 1293);
+  assert.ok(implied >= 1291, `implied ${implied} < required 1291`);
+  assert.ok(
+    implied <= 1291 + resolved.remainingDays,
+    `implied ${implied} > required 1291 + ${resolved.remainingDays}`
+  );
 });
 
 // 되돌려더한 분자를 그냥 날수로 나누면 휴가가 하루 필요량을 넘는 날에서 음수 근무를 가정하게 된다.
