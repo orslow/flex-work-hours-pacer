@@ -111,3 +111,61 @@ test('buildCompactMessage builds the done message', () => {
 test('buildCompactMessage builds the noDaysLeft message', () => {
   assert.equal(lib.buildCompactMessage(60, 0), 'No days left');
 });
+
+test('readPageDate reads the date query parameter as a local date', () => {
+  const d = lib.readPageDate('?date=2026-09-30');
+  assert.equal(d.getFullYear(), 2026);
+  assert.equal(d.getMonth(), 8);
+  assert.equal(d.getDate(), 30);
+  assert.equal(lib.readPageDate('?tab=all&date=2026-09-30').getDate(), 30);
+});
+
+test('readPageDate returns null when the date is missing or unusable', () => {
+  assert.equal(lib.readPageDate(''), null);
+  assert.equal(lib.readPageDate('?tab=all'), null);
+  assert.equal(lib.readPageDate('?date=2026/09/30'), null);
+  assert.equal(lib.readPageDate(undefined), null);
+});
+
+test('isDateInPeriod includes both ends of the period', () => {
+  const period = { startDate: '2026-09-01', endDateInclusive: '2026-09-30' };
+  assert.equal(lib.isDateInPeriod(period, new Date(2026, 8, 1)), true);
+  assert.equal(lib.isDateInPeriod(period, new Date(2026, 8, 30, 23, 59)), true);
+  assert.equal(lib.isDateInPeriod(period, new Date(2026, 9, 1)), false);
+  assert.equal(lib.isDateInPeriod(period, new Date(2026, 7, 31)), false);
+});
+
+test('isDateInPeriod is false for an unusable period', () => {
+  assert.equal(lib.isDateInPeriod({ startDate: null, endDateInclusive: '2026-09-30' }, new Date(2026, 8, 5)), false);
+  assert.equal(lib.isDateInPeriod(null, new Date(2026, 8, 5)), false);
+});
+
+test('remainingFromDate starts from today inside or after the period', () => {
+  const today = new Date(2026, 9, 2, 10, 0);
+  // 이번 기간 / 지난 기간 모두 오늘부터. 지난 기간은 오늘이 종료일 뒤라 0일이 됨
+  assert.equal(lib.remainingFromDate(today, new Date(2026, 9, 1)), today);
+  assert.equal(lib.remainingFromDate(today, new Date(2026, 8, 1)), today);
+  assert.equal(lib.remainingFromDate(today, new Date(2026, 9, 2)), today);
+});
+
+test('remainingFromDate starts from the period start for a future period', () => {
+  const start = new Date(2026, 10, 1);
+  assert.equal(lib.remainingFromDate(new Date(2026, 9, 2, 10, 0), start), start);
+});
+
+test('buildMissingRecordMessage returns null when nothing is missing', () => {
+  assert.equal(lib.buildMissingRecordMessage([]), null);
+});
+
+test('buildMissingRecordMessage lists up to three dates and counts the rest', () => {
+  const day = (isoDate) => ({ isoDate });
+  assert.equal(lib.buildMissingRecordMessage([day('2026-09-07')]), 'No record: 09-07');
+  assert.equal(
+    lib.buildMissingRecordMessage([day('2026-09-07'), day('2026-09-14'), day('2026-09-15')]),
+    'No record: 09-07, 09-14, 09-15'
+  );
+  assert.equal(
+    lib.buildMissingRecordMessage([day('2026-09-07'), day('2026-09-14'), day('2026-09-15'), day('2026-09-17')]),
+    'No record: 09-07, 09-14, 09-15 +1'
+  );
+});

@@ -694,3 +694,58 @@ test('leaveAddBackMinutes and sumRemainingLeaveMinutes deliberately differ once 
     coveredLeave
   );
 });
+
+// 지난 정산기간을 볼 때: 오늘이 종료일 뒤라 남은 근무일이 0일
+const OCT_2 = new Date(2026, 9, 2, 10, 0);
+const START_OF_PERIOD = new Date(2026, 8, 1);
+
+test('a past period that met the goal shows Goal met', () => {
+  const days = lib.buildDaysFromApi(SEP_2026);
+  const resolved = lib.resolveRemaining(-17, days, lib.remainingFromDate(OCT_2, START_OF_PERIOD), END_OF_PERIOD);
+  assert.equal(resolved.remainingWorkDays, 0);
+  assert.equal(lib.buildCompactMessage(resolved.remainingMinutes, resolved.remainingDays), 'Goal met 🎉');
+});
+
+test('a past period still short of the goal shows No days left', () => {
+  const days = lib.buildDaysFromApi(SEP_2026);
+  const resolved = lib.resolveRemaining(60, days, lib.remainingFromDate(OCT_2, START_OF_PERIOD), END_OF_PERIOD);
+  assert.equal(lib.buildCompactMessage(resolved.remainingMinutes, resolved.remainingDays), 'No days left');
+});
+
+test('a future period counts work days from its start', () => {
+  const days = lib.buildDaysFromApi(SEP_2026);
+  const fromDate = lib.remainingFromDate(new Date(2026, 7, 20, 10, 0), START_OF_PERIOD);
+  // 9/1부터 셈. 근무 기록(합성)이 있는 1~4, 7~9일은 WORKED라 빠지고 나머지는 9/10 기준과 같음
+  assert.equal(lib.countRemainingWorkDays(days, fromDate, END_OF_PERIOD), 12);
+});
+
+function missingDatesOf(days, today) {
+  return lib.collectMissingRecordDays(days, START_OF_PERIOD, END_OF_PERIOD, today).map((d) => d.isoDate);
+}
+
+test('collectMissingRecordDays finds past work days with no record, excluding today', () => {
+  const days = lib.buildDaysFromApi(SEP_2026);
+  // 9/15 기준 지난 근무일 중 기록 없는 날: 11, 14. 9/10은 퇴근을 안 찍은 채 남은 날이라 같이 잡힘.
+  // 9/15(오늘)는 근무 중에도 기록이 비어 내려오므로 제외
+  assert.deepEqual(missingDatesOf(days, new Date(2026, 8, 15, 10, 0)), ['2026-09-10', '2026-09-11', '2026-09-14']);
+});
+
+test('collectMissingRecordDays skips holidays, full-day leave and worked days', () => {
+  const days = lib.buildDaysFromApi(SEP_2026);
+  const missing = missingDatesOf(days, new Date(2026, 8, 23, 10, 0));
+  // 16(공휴일), 21~22(종일 연차), 1~4·7~9(근무)는 없어야 함
+  assert.deepEqual(missing, ['2026-09-10', '2026-09-11', '2026-09-14', '2026-09-15', '2026-09-17', '2026-09-18']);
+});
+
+test('collectMissingRecordDays counts a past day with only partial leave and no work', () => {
+  const days = lib.buildDaysFromApi(withSchedule('2026-09-11', [fx.timeOffBlock(180, false)]));
+  assert.ok(missingDatesOf(days, new Date(2026, 8, 15, 10, 0)).includes('2026-09-11'));
+});
+
+test('collectMissingRecordDays covers the whole past period and nothing of a future one', () => {
+  const days = lib.buildDaysFromApi(SEP_2026);
+  const pastMissing = missingDatesOf(days, OCT_2);
+  assert.equal(pastMissing.length, 12);
+  assert.equal(pastMissing[pastMissing.length - 1], '2026-09-30');
+  assert.deepEqual(missingDatesOf(days, new Date(2026, 7, 20, 10, 0)), []);
+});

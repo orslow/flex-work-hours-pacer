@@ -4,12 +4,16 @@
 
 `133:03` 실근무시간 위젯 바로 아래에 `Need Xh Ym/day (Nd)` 형태로 작게 표시됩니다. 괄호 안은 남은 근무일수로, 계산이 조용히 틀렸을 때 눈으로 바로 확인하기 위한 값입니다.
 
+근무해야 했는데 기록이 빈 지난 날이 있으면 그 아래 주황색 줄로 `No record: 09-07`처럼 표시됩니다(3개까지, 나머지는 `+N`).
+
 ## 어떻게 계산하나요
 
 DOM을 읽지 않고 flex.team이 페이지를 그릴 때 쓰는 내부 API를 같은 오리진으로 호출합니다. 로그인 쿠키가 그대로 붙으므로 별도 인증 처리는 없습니다.
 
 - **신원**: 쿠키 `V2_CUSTOMER_INFO`의 `userIdHash`
-- **정산기간**: `work-rule/.../working-periods/by-timestamp-range` -> `startDate` / `endDateInclusive`
+- **정산기간**: `work-rule/.../working-periods/by-timestamp-range` -> `startDate` / `endDateInclusive`. 오늘이 아니라 **페이지 URL의 `?date=`가 속한 기간**을 씁니다(없으면 오늘). flex에서 월을 옮기면 경로는 그대로 두고 `date`만 바뀌므로 그 변화도 감지해 다시 계산합니다.
+  - 지난 기간은 남은 근무일이 0일이라 `Goal met 🎉` 또는 `No days left`로 나옵니다. 다음 기간은 시작일부터 셉니다.
+- **기록 누락**: 기간 시작일부터 어제까지 중, 아래 "남은 근무일" 판정으로 아직 일해야 하는 날로 잡히는 날입니다. 휴일·종일 연차·끝난 `WORK` 블록이 있는 날은 빠지고, 시차·반차만 있고 근무 기록이 없는 날은 들어갑니다. 오늘은 근무 중에도 블록이 비어 오므로 제외합니다. 완전선택근로는 기간 총량만 보므로 누락이 있어도 `Goal met`일 수 있어, 따로 보여줍니다.
 - **잔여 필수 근무시간**: `time-tracking/.../work-schedules/summary/by-working-period`의 `resultForFullFlexible.requiredWorkingMinutes`. 그 필드가 없는 근무제에서는 `requiredAgreedWorkingMinutes - totalRecognizedWorkingMinutes`로 같은 값을 만듭니다.
 - **남은 근무일수**: 오늘(포함)부터 정산기간 종료일까지, 아래에 해당하지 않는 날을 셉니다.
   - `work-schedules/date-attributes`의 `dayOffs[].type` -> `REST_DAY`(토) / `WEEKLY_HOLIDAY`(일) / `CUSTOM_HOLIDAY`(공휴일, 대체공휴일)
@@ -66,10 +70,10 @@ npm test
 ```
 [flex-pacer] period=2026-09-01..2026-09-30, required=1291m, addBack=120m, remaining=1411m,
              workDays=3/3, excluded=09-24:CUSTOM_HOLIDAY ..., partialLeave=09-23:120m/480m,
-             covered=, flexOwn=430m/3d
+             covered=, missing=09-07, flexOwn=430m/3d
 ```
 
-`workDays=`는 `하루 필요량에 쓴 날수/남은 근무일수`, `covered=`는 휴가만으로 채워져 빠진 날, `flexOwn=`은 flex 자신의 계산값입니다(계산에는 쓰지 않고 대조용으로만 찍습니다).
+`workDays=`는 `하루 필요량에 쓴 날수/남은 근무일수`, `covered=`는 휴가만으로 채워져 빠진 날, `missing=`은 기록 누락일 전체 목록, `flexOwn=`은 flex 자신의 계산값입니다(계산에는 쓰지 않고 대조용으로만 찍습니다).
 
 계산 로직 검증은 실제 API 응답을 브라우저 콘솔에서 파일로 저장해 로컬에서 돌려보는 방식으로 했습니다. 응답에는 개인 근무기록이 들어있어 저장소에 커밋하지 않고, `test/fixtures`에는 같은 모양의 합성 데이터만 둡니다.
 

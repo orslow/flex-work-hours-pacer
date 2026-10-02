@@ -2,7 +2,7 @@
 // 로그인 쿠키가 그대로 붙고, 별도 토큰 처리가 필요없다.
 (function () {
   var TIMEZONE = 'Asia/Seoul';
-  // 현재 정산기간을 찾기 위한 조회 폭. 정산기간이 한 달이라도 경계에 걸치면 놓치지 않도록 넉넉히 잡음
+  // 기준일의 정산기간을 찾기 위한 조회 폭. 정산기간이 한 달이라도 경계에 걸치면 놓치지 않도록 넉넉히 잡음
   var PERIOD_LOOKUP_DAYS = 45;
   var DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -33,24 +33,22 @@
     return '/api/v3/time-tracking/users/' + encodeURIComponent(userIdHash) + suffix;
   }
 
-  function fetchWorkingPeriod(userIdHash, nowMs) {
-    var from = nowMs - PERIOD_LOOKUP_DAYS * DAY_MS;
-    var to = nowMs + PERIOD_LOOKUP_DAYS * DAY_MS;
+  function fetchWorkingPeriod(userIdHash, targetMs) {
+    var from = targetMs - PERIOD_LOOKUP_DAYS * DAY_MS;
+    var to = targetMs + PERIOD_LOOKUP_DAYS * DAY_MS;
     var url =
       '/api/v2/work-rule/users/' + encodeURIComponent(userIdHash) +
       '/working-periods/by-timestamp-range/' + from + '..' + to;
     return getJson(url).then(function (json) {
       var periods = (json && json.periods) || [];
-      var today = window.FlexPacerLib.stripTime(new Date(nowMs)).getTime();
       for (var i = 0; i < periods.length; i++) {
-        var start = window.FlexPacerLib.parseIsoDate(periods[i].startDate);
-        var end = window.FlexPacerLib.parseIsoDate(periods[i].endDateInclusive);
-        if (!start || !end) continue;
-        if (today >= start.getTime() && today <= end.getTime()) {
+        if (window.FlexPacerLib.isDateInPeriod(periods[i], new Date(targetMs))) {
           return { startDate: periods[i].startDate, endDateInclusive: periods[i].endDateInclusive };
         }
       }
-      throw new Error('no working period contains today (' + periods.length + ' returned)');
+      throw new Error(
+        'no working period contains ' + new Date(targetMs).toDateString() + ' (' + periods.length + ' returned)'
+      );
     });
   }
 
@@ -129,14 +127,21 @@
     });
   }
 
-  // 지표 계산에 필요한 입력 일체를 모아서 반환
-  function loadPaceInputs(now) {
+  // 지표 계산에 필요한 입력 일체를 모아서 반환. pageDate(페이지가 보는 날짜)가 속한 정산기간 기준이고,
+  // 없으면 오늘의 정산기간
+  function loadPaceInputs(pageDate, now) {
     var identity = readIdentity();
     if (!identity) return Promise.reject(new Error('V2_CUSTOMER_INFO cookie not found'));
     var nowMs = (now || new Date()).getTime();
-    return fetchWorkingPeriod(identity.userIdHash, nowMs).then(function (period) {
+    // 정오로 잡아 브라우저/서버 시간대 차이로 날짜가 넘어가지 않게 함
+    var targetMs = pageDate
+      ? new Date(pageDate.getFullYear(), pageDate.getMonth(), pageDate.getDate(), 12).getTime()
+      : nowMs;
+    return fetchWorkingPeriod(identity.userIdHash, targetMs).then(function (period) {
+      // 오늘이 든 기간은 지금 시각 그대로, 다른 기간은 그 기간 안의 페이지 날짜로 summary 조회
+      var summaryMs = window.FlexPacerLib.isDateInPeriod(period, new Date(nowMs)) ? nowMs : targetMs;
       return Promise.all([
-        fetchSummary(identity.userIdHash, nowMs),
+        fetchSummary(identity.userIdHash, summaryMs),
         fetchDayAttributes(identity.userIdHash, period.startDate, period.endDateInclusive),
         fetchDailySchedules(identity.userIdHash, period.startDate, period.endDateInclusive),
       ]).then(function (values) {

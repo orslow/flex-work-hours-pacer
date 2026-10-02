@@ -134,6 +134,27 @@ function isRemainingWorkDay(dayInfo, fromMs, endMs) {
   return t >= fromMs && t <= endMs && dayInfo.isWorkDay;
 }
 
+// 페이지 URL의 ?date=YYYY-MM-DD. flex는 월을 옮길 때 경로는 두고 이 값만 바꿈.
+// 없거나 형식이 틀리면 null 반환 (호출부에서 오늘로 대체)
+function readPageDate(search) {
+  return parseIsoDate(new URLSearchParams(String(search || '')).get('date'));
+}
+
+// 그 날짜가 정산기간(종료일 포함) 안인지
+function isDateInPeriod(period, date) {
+  var start = parseIsoDate(period && period.startDate);
+  var end = parseIsoDate(period && period.endDateInclusive);
+  if (!start || !end) return false;
+  var t = stripTime(date).getTime();
+  return t >= start.getTime() && t <= end.getTime();
+}
+
+// 남은 근무일을 세기 시작하는 날. 오늘과 기간 시작일 중 늦은 쪽.
+// 지난 기간은 오늘이 종료일 뒤라 0일, 다음 기간은 시작일부터 셈
+function remainingFromDate(today, periodStart) {
+  return stripTime(today).getTime() >= stripTime(periodStart).getTime() ? today : periodStart;
+}
+
 // 분모에 남는 날들. 개수가 곧 남은 근무일수이고, 휴가 시간의 합이 되돌려더할 후보다.
 // 둘이 같은 목록에서 나와야 한쪽에만 잡히는 날이 안 생긴다.
 function collectRemainingWorkDays(dayInfos, fromDate, endDate) {
@@ -144,6 +165,22 @@ function collectRemainingWorkDays(dayInfos, fromDate, endDate) {
     if (isRemainingWorkDay(dayInfos[i], fromMs, endMs)) remaining.push(dayInfos[i]);
   }
   return remaining;
+}
+
+// 근무해야 했는데 기록이 빈 지난 날. 기간 시작일부터 어제까지 중 isWorkDay인 날
+// (휴일 아님, 종일 휴가 아님, 끝난 근무 블록 없음). 시차/반차만 있고 근무 기록이 없는 날도 포함.
+// 남은 근무일과 같은 판정을 써서 "아직 일해야 하는 날"의 기준이 한 군데로 모임.
+// 오늘은 근무 중에도 timeBlocks가 비어 내려오므로 제외
+function collectMissingRecordDays(dayInfos, periodStart, periodEnd, today) {
+  var fromMs = stripTime(periodStart).getTime();
+  var t = stripTime(today);
+  var yesterdayMs = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 1).getTime();
+  var endMs = Math.min(stripTime(periodEnd).getTime(), yesterdayMs);
+  var missing = [];
+  for (var i = 0; i < dayInfos.length; i++) {
+    if (isRemainingWorkDay(dayInfos[i], fromMs, endMs)) missing.push(dayInfos[i]);
+  }
+  return missing;
 }
 
 function leaveMinutesOf(dayInfo) {
@@ -289,6 +326,22 @@ function buildCompactMessage(remainingMinutes, remainingDays) {
   return 'Need ' + formatCompactRemaining(pace.dailyMinutes) + '/day (' + remainingDays + 'd)';
 }
 
+var MISSING_RECORD_SHOWN = 3;
+
+// 기록 누락 줄 문구. 누락이 없으면 null 반환 (줄 자체를 안 그림)
+function buildMissingRecordMessage(missingDays) {
+  if (!missingDays.length) return null;
+  var shown = [];
+  for (var i = 0; i < missingDays.length && i < MISSING_RECORD_SHOWN; i++) {
+    shown.push(missingDays[i].isoDate.slice(5));
+  }
+  var message = 'No record: ' + shown.join(', ');
+  if (missingDays.length > MISSING_RECORD_SHOWN) {
+    message += ' +' + (missingDays.length - MISSING_RECORD_SHOWN);
+  }
+  return message;
+}
+
 var FlexPacerLib = {
   parseIsoDate: parseIsoDate,
   summarizeSchedule: summarizeSchedule,
@@ -296,6 +349,10 @@ var FlexPacerLib = {
   buildDaysFromApi: buildDaysFromApi,
   stripTime: stripTime,
   isRemainingWorkDay: isRemainingWorkDay,
+  readPageDate: readPageDate,
+  isDateInPeriod: isDateInPeriod,
+  remainingFromDate: remainingFromDate,
+  collectMissingRecordDays: collectMissingRecordDays,
   countRemainingWorkDays: countRemainingWorkDays,
   sumRemainingLeaveMinutes: sumRemainingLeaveMinutes,
   resolveRemaining: resolveRemaining,
@@ -304,6 +361,7 @@ var FlexPacerLib = {
   buildBannerMessage: buildBannerMessage,
   formatCompactRemaining: formatCompactRemaining,
   buildCompactMessage: buildCompactMessage,
+  buildMissingRecordMessage: buildMissingRecordMessage,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

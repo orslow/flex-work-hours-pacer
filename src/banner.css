@@ -5,3 +5,13 @@
   font-weight: 600;
   color: #1a3a5c;
 }
+
+/* 배지 바로 아래 줄이라 위 여백은 배지의 아래 여백과 겹치게 당김 */
+.flex-pacer-missing {
+  text-align: right;
+  margin-top: -6px;
+  padding: 0 24px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c2410c;
+}
